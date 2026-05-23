@@ -1,0 +1,567 @@
+#!/usr/bin/env node
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { Client } from "ssh2";
+
+// 環境変数からSSH接続情報を取得
+const AIX_HOST = process.env.AIX_HOST;
+const AIX_PORT = parseInt(process.env.AIX_PORT || "22");
+const AIX_USERNAME = process.env.AIX_USERNAME;
+const AIX_PASSWORD = process.env.AIX_PASSWORD;
+const AIX_PRIVATE_KEY = process.env.AIX_PRIVATE_KEY;
+
+// Proxy/踏み台サーバーの設定（オプション）
+const PROXY_HOST = process.env.PROXY_HOST;
+const PROXY_PORT = parseInt(process.env.PROXY_PORT || "22");
+const PROXY_USERNAME = process.env.PROXY_USERNAME;
+const PROXY_PASSWORD = process.env.PROXY_PASSWORD;
+const PROXY_PRIVATE_KEY = process.env.PROXY_PRIVATE_KEY;
+
+if (!AIX_HOST || !AIX_USERNAME) {
+  throw new Error("AIX_HOST and AIX_USERNAME environment variables are required");
+}
+
+if (!AIX_PASSWORD && !AIX_PRIVATE_KEY) {
+  throw new Error("Either AIX_PASSWORD or AIX_PRIVATE_KEY must be provided");
+}
+
+// Proxyサーバー経由でSSH接続を確立する関数
+async function executeSSHCommand(command: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    // Proxyサーバーが設定されている場合
+    if (PROXY_HOST && PROXY_USERNAME) {
+      const proxyConn = new Client();
+      
+      proxyConn.on("ready", () => {
+        // Proxyサーバーから目的のAIXサーバーへの接続を確立
+        proxyConn.forwardOut(
+          "127.0.0.1",
+          0,
+          AIX_HOST!,
+          AIX_PORT,
+          (err, stream) => {
+            if (err) {
+              proxyConn.end();
+              reject(err);
+              return;
+            }
+
+            // AIXサーバーへの接続
+            const aixConn = new Client();
+            let output = "";
+            let errorOutput = "";
+
+            aixConn.on("ready", () => {
+              aixConn.exec(command, (err, execStream) => {
+                if (err) {
+                  aixConn.end();
+                  proxyConn.end();
+                  reject(err);
+                  return;
+                }
+
+                execStream
+                  .on("close", (code: number) => {
+                    aixConn.end();
+                    proxyConn.end();
+                    if (code !== 0) {
+                      reject(new Error(`Command failed with code ${code}: ${errorOutput}`));
+                    } else {
+                      resolve(output);
+                    }
+                  })
+                  .on("data", (data: Buffer) => {
+                    output += data.toString();
+                  })
+                  .stderr.on("data", (data: Buffer) => {
+                    errorOutput += data.toString();
+                  });
+              });
+            });
+
+            aixConn.on("error", (err) => {
+              proxyConn.end();
+              reject(err);
+            });
+
+            const aixConfig: any = {
+              sock: stream,
+              username: AIX_USERNAME,
+              readyTimeout: 30000,
+              timeout: 30000,
+            };
+
+            if (AIX_PRIVATE_KEY) {
+              aixConfig.privateKey = AIX_PRIVATE_KEY;
+            } else {
+              aixConfig.password = AIX_PASSWORD;
+            }
+
+            aixConn.connect(aixConfig);
+          }
+        );
+      });
+
+      proxyConn.on("error", (err) => {
+        reject(err);
+      });
+
+      const proxyConfig: any = {
+        host: PROXY_HOST,
+        port: PROXY_PORT,
+        username: PROXY_USERNAME,
+        readyTimeout: 30000,
+        timeout: 30000,
+      };
+
+      if (PROXY_PRIVATE_KEY) {
+        proxyConfig.privateKey = PROXY_PRIVATE_KEY;
+      } else if (PROXY_PASSWORD) {
+        proxyConfig.password = PROXY_PASSWORD;
+      } else {
+        reject(new Error("Either PROXY_PASSWORD or PROXY_PRIVATE_KEY must be provided when using proxy"));
+        return;
+      }
+
+      proxyConn.connect(proxyConfig);
+    } else {
+      // Proxyなしの直接接続
+      const conn = new Client();
+      let output = "";
+      let errorOutput = "";
+
+      conn.on("ready", () => {
+        conn.exec(command, (err, stream) => {
+          if (err) {
+            conn.end();
+            reject(err);
+            return;
+          }
+
+          stream
+            .on("close", (code: number) => {
+              conn.end();
+              if (code !== 0) {
+                reject(new Error(`Command failed with code ${code}: ${errorOutput}`));
+              } else {
+                resolve(output);
+              }
+            })
+            .on("data", (data: Buffer) => {
+              output += data.toString();
+            })
+            .stderr.on("data", (data: Buffer) => {
+              errorOutput += data.toString();
+            });
+        });
+      });
+
+      conn.on("error", (err) => {
+        reject(err);
+      });
+
+      const connectConfig: any = {
+        host: AIX_HOST,
+        port: AIX_PORT,
+        username: AIX_USERNAME,
+        readyTimeout: 30000,
+        timeout: 30000,
+      };
+
+      if (AIX_PRIVATE_KEY) {
+        connectConfig.privateKey = AIX_PRIVATE_KEY;
+      } else {
+        connectConfig.password = AIX_PASSWORD;
+      }
+
+      conn.connect(connectConfig);
+    }
+  });
+}
+
+// ツール定義
+const tools: Tool[] = [
+  {
+    name: "execute_aix_command",
+    description:
+      "Execute a command on the AIX system via SSH. Use this for any AIX-specific operations like oslevel, lsdev, errpt, etc.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        command: {
+          type: "string",
+          description: "The command to execute on the AIX system",
+        },
+      },
+      required: ["command"],
+    },
+  },
+  {
+    name: "get_aix_system_info",
+    description:
+      "Get comprehensive AIX system information including OS level, hardware details, and configuration",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "list_aix_devices",
+    description:
+      "List all devices on the AIX system with their status and descriptions",
+    inputSchema: {
+      type: "object",
+      properties: {
+        device_class: {
+          type: "string",
+          description: "Optional device class to filter (e.g., disk, adapter, processor)",
+        },
+      },
+    },
+  },
+  {
+    name: "check_aix_errors",
+    description:
+      "Check the AIX error log for recent errors and warnings",
+    inputSchema: {
+      type: "object",
+      properties: {
+        hours: {
+          type: "number",
+          description: "Number of hours to look back (default: 24)",
+        },
+      },
+    },
+  },
+  {
+    name: "get_aix_performance",
+    description:
+      "Get AIX system performance metrics including CPU, memory, and disk usage",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "list_aix_filesystems",
+    description:
+      "List all mounted filesystems on the AIX system with usage information",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "get_aix_network_info",
+    description:
+      "Get AIX network configuration and interface information",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "list_aix_processes",
+    description:
+      "List running processes on the AIX system",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filter: {
+          type: "string",
+          description: "Optional filter string to search for specific processes",
+        },
+      },
+    },
+  },
+  {
+    name: "get_aix_users",
+    description:
+      "Get information about users and groups on the AIX system",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "read_aix_file",
+    description:
+      "Read the contents of a file on the AIX system",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: "The full path to the file to read",
+        },
+        lines: {
+          type: "number",
+          description: "Optional number of lines to read (default: all)",
+        },
+      },
+      required: ["path"],
+    },
+  },
+];
+
+// MCPサーバーの作成
+const server = new Server(
+  {
+    name: "aix-server",
+    version: "1.0.0",
+  },
+  {
+    capabilities: {
+      tools: {},
+    },
+  }
+);
+
+// ツールリストハンドラー
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return { tools };
+});
+
+// ツール呼び出しハンドラー
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+
+  try {
+    switch (name) {
+      case "execute_aix_command": {
+        const { command } = args as { command: string };
+        const output = await executeSSHCommand(command);
+        return {
+          content: [
+            {
+              type: "text",
+              text: output,
+            },
+          ],
+        };
+      }
+
+      case "get_aix_system_info": {
+        const commands = [
+          "oslevel -s",
+          "uname -a",
+          "prtconf | head -20",
+          "lsattr -El sys0 -a realmem",
+          "bootinfo -s hdisk0",
+        ];
+        const results = await Promise.all(
+          commands.map(async (cmd) => {
+            try {
+              const output = await executeSSHCommand(cmd);
+              return `$ ${cmd}\n${output}`;
+            } catch (error) {
+              return `$ ${cmd}\nError: ${error}`;
+            }
+          })
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: results.join("\n\n"),
+            },
+          ],
+        };
+      }
+
+      case "list_aix_devices": {
+        const { device_class } = args as { device_class?: string };
+        const command = device_class
+          ? `lsdev -Cc ${device_class}`
+          : "lsdev";
+        const output = await executeSSHCommand(command);
+        return {
+          content: [
+            {
+              type: "text",
+              text: output,
+            },
+          ],
+        };
+      }
+
+      case "check_aix_errors": {
+        const { hours = 24 } = args as { hours?: number };
+        const command = `errpt -a -s \`date -v-${hours}H +%m%d%H%M%Y\` 2>/dev/null || errpt -a | head -100`;
+        const output = await executeSSHCommand(command);
+        return {
+          content: [
+            {
+              type: "text",
+              text: output || "No errors found in the specified time period",
+            },
+          ],
+        };
+      }
+
+      case "get_aix_performance": {
+        const commands = [
+          "vmstat 1 2 | tail -1",
+          "iostat -d 1 2 | tail -n +3",
+          "svmon -G",
+          "topas -n 1 2>/dev/null || echo 'topas not available'",
+        ];
+        const results = await Promise.all(
+          commands.map(async (cmd) => {
+            try {
+              const output = await executeSSHCommand(cmd);
+              return `$ ${cmd}\n${output}`;
+            } catch (error) {
+              return `$ ${cmd}\nError: ${error}`;
+            }
+          })
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: results.join("\n\n"),
+            },
+          ],
+        };
+      }
+
+      case "list_aix_filesystems": {
+        const command = "df -g";
+        const output = await executeSSHCommand(command);
+        return {
+          content: [
+            {
+              type: "text",
+              text: output,
+            },
+          ],
+        };
+      }
+
+      case "get_aix_network_info": {
+        const commands = [
+          "ifconfig -a",
+          "netstat -rn",
+          "lsattr -El inet0",
+        ];
+        const results = await Promise.all(
+          commands.map(async (cmd) => {
+            try {
+              const output = await executeSSHCommand(cmd);
+              return `$ ${cmd}\n${output}`;
+            } catch (error) {
+              return `$ ${cmd}\nError: ${error}`;
+            }
+          })
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: results.join("\n\n"),
+            },
+          ],
+        };
+      }
+
+      case "list_aix_processes": {
+        const { filter } = args as { filter?: string };
+        const command = filter
+          ? `ps -ef | grep "${filter}" | grep -v grep`
+          : "ps -ef";
+        const output = await executeSSHCommand(command);
+        return {
+          content: [
+            {
+              type: "text",
+              text: output,
+            },
+          ],
+        };
+      }
+
+      case "get_aix_users": {
+        const commands = [
+          "lsuser ALL",
+          "lsgroup ALL",
+          "who",
+        ];
+        const results = await Promise.all(
+          commands.map(async (cmd) => {
+            try {
+              const output = await executeSSHCommand(cmd);
+              return `$ ${cmd}\n${output}`;
+            } catch (error) {
+              return `$ ${cmd}\nError: ${error}`;
+            }
+          })
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: results.join("\n\n"),
+            },
+          ],
+        };
+      }
+
+      case "read_aix_file": {
+        const { path, lines } = args as { path: string; lines?: number };
+        const command = lines
+          ? `head -n ${lines} "${path}"`
+          : `cat "${path}"`;
+        const output = await executeSSHCommand(command);
+        return {
+          content: [
+            {
+              type: "text",
+              text: output,
+            },
+          ],
+        };
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Unknown tool: ${name}`,
+            },
+          ],
+          isError: true,
+        };
+    }
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error executing ${name}: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+});
+
+// サーバーの起動
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error("AIX MCP Server running on stdio");
+}
+
+main().catch((error) => {
+  console.error("Fatal error:", error);
+  process.exit(1);
+});
+
+// Made with Bob

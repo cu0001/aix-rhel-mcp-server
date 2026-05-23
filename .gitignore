@@ -1,0 +1,46 @@
+# MCP設定ファイル（機密情報を含む可能性があるため）
+.mcp_settings.json
+.bob/mcp.json
+.bob/mcp1aix.json
+.bob/mcp_1rhel.json
+.bob/mcp_2aix.json
+.bob/mcp_2rhel.json
+.bob/mcp_4all.json
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ビルド出力
+aix-server/build/
+aix-server/dist/
+rhel-server/build/
+rhel-server/dist/
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ログファイル
+*.log
+
+# 環境変数ファイル
+.env
+.env.local
+.env.*.local
+.bob/skills/aix_normal_operations.md
+/Bob-report
+aix_health_check_simple.md
+architecture_diagram.md

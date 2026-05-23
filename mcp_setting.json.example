@@ -1,0 +1,84 @@
+{
+  "mcpServers": {
+    "aix-server1": {
+      "command": "node",
+      "args": [
+        "./aix-server/build/index.js"
+      ],
+      "env": {
+        "AIX_HOST": "your-aix1-hostname-or-ip",
+        "AIX_PORT": "22",
+        "AIX_USERNAME": "your-aix1-username",
+        "AIX_PASSWORD": "your-aix1-password",
+        "PROXY_HOST": "your-proxy-hostname-or-ip",
+        "PROXY_PORT": "22",
+        "PROXY_USERNAME": "your-proxy-username",
+        "PROXY_PASSWORD": "your-proxy-password"
+      },
+      "disabled": false,
+      "alwaysAllow": [],
+      "disabledTools": [],
+      "_comment": "AIX server 1. PROXY_* variables are optional. Use AIX_PRIVATE_KEY instead of AIX_PASSWORD for SSH key authentication."
+    },
+    "aix-server2": {
+      "command": "node",
+      "args": [
+        "./aix-server/build/index.js"
+      ],
+      "env": {
+        "AIX_HOST": "your-aix2-hostname-or-ip",
+        "AIX_PORT": "22",
+        "AIX_USERNAME": "your-aix2-username",
+        "AIX_PASSWORD": "your-aix2-password",
+        "PROXY_HOST": "your-proxy-hostname-or-ip",
+        "PROXY_PORT": "22",
+        "PROXY_USERNAME": "your-proxy-username",
+        "PROXY_PASSWORD": "your-proxy-password"
+      },
+      "disabled": false,
+      "alwaysAllow": [],
+      "disabledTools": [],
+      "_comment": "AIX server 2. PROXY_* variables are optional. Use AIX_PRIVATE_KEY instead of AIX_PASSWORD for SSH key authentication."
+    },
+    "rhel-server1": {
+      "command": "node",
+      "args": [
+        "./rhel-server/build/index.js"
+      ],
+      "env": {
+        "RHEL_HOST": "your-rhel1-hostname-or-ip",
+        "RHEL_PORT": "22",
+        "RHEL_USERNAME": "your-rhel1-username",
+        "RHEL_PASSWORD": "your-rhel1-password",
+        "PROXY_HOST": "your-proxy-hostname-or-ip",
+        "PROXY_PORT": "22",
+        "PROXY_USERNAME": "your-proxy-username",
+        "PROXY_PASSWORD": "your-proxy-password"
+      },
+      "disabled": false,
+      "alwaysAllow": [],
+      "disabledTools": [],
+      "_comment": "RHEL ppc64le server 1. PROXY_* variables are optional. Use RHEL_PRIVATE_KEY instead of RHEL_PASSWORD for SSH key authentication."
+    },
+    "rhel-server2": {
+      "command": "node",
+      "args": [
+        "./rhel-server/build/index.js"
+      ],
+      "env": {
+        "RHEL_HOST": "your-rhel2-hostname-or-ip",
+        "RHEL_PORT": "22",
+        "RHEL_USERNAME": "your-rhel2-username",
+        "RHEL_PASSWORD": "your-rhel2-password",
+        "PROXY_HOST": "your-proxy-hostname-or-ip",
+        "PROXY_PORT": "22",
+        "PROXY_USERNAME": "your-proxy-username",
+        "PROXY_PASSWORD": "your-proxy-password"
+      },
+      "disabled": false,
+      "alwaysAllow": [],
+      "disabledTools": [],
+      "_comment": "RHEL ppc64le server 2. PROXY_* variables are optional. Use RHEL_PRIVATE_KEY instead of RHEL_PASSWORD for SSH key authentication."
+    }
+  }
+}
