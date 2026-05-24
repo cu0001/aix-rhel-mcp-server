@@ -1,6 +1,8 @@
 ---
 name: RHEL ppc64le Version and Configuration Comparison
-description: 2つのRHEL ppc64leシステムのOS、kernel、Power/CPU情報、systemd、sysctl、limits、設定ファイル、ユーザー、RPM package、コマンドメタ情報を比較し、構成差異レポートを生成します。
+description: 2つのRHEL ppc64leシステムの構成・バージョン差異を比較したいときにOS・kernel・sysctl・RPM・service・設定ファイルを収集して差異レポートを生成する
+version: 1.0.0
+tags: [rhel, ppc64le, comparison, configuration]
 ---
 
 <Steps>
@@ -73,7 +75,7 @@ description: 2つのRHEL ppc64leシステムのOS、kernel、Power/CPU情報、s
 - `rhel-server2`
 
 ## Report Structure
-- **エグゼクティブサマリ**: 重要差異と推奨判断
+- **エグゼクティブサマリー**: 重要差異と推奨判断
 - **比較対象**: サーバー名、RHEL version、kernel、取得時刻
 - **OS/kernel/Power差異**: version、kernel、ppc64le/Power情報
 - **sysctl/limits差異**: 重要パラメータの不一致

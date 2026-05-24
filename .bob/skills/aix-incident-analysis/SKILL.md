@@ -1,6 +1,8 @@
 ---
 name: AIX Incident Analysis
-description: AIXシステムで発生した障害を、読み取り専用の一次確認から必要な診断データ取得まで段階的に解析し、インシデントレポートを生成します。
+description: AIXで障害・性能劣化・I/O遅延・ネットワーク異常・予期しない再起動が疑われるときに段階的に解析してインシデントレポートを生成する
+version: 1.0.0
+tags: [aix, incident, analysis]
 ---
 
 <Steps>
